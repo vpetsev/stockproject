@@ -25,18 +25,25 @@ const database = firebase.database()
 let rootRef = database.ref()
 let auth = firebase.auth()
 
-document.getElementById("btnSignUp").onclick = function () {
+document.getElementById("btnSignUp").onclick = function (event) {
+    if (event) event.preventDefault()
     const email = txtEmail.value
     const pass = txtPassword.value
     const rptPass = txtPassword2.value
-    signUp(email, pass)
+    if (pass !== rptPass) {
+        txtPassword2.className += " is-invalid"
+        pwdCheck.className = "invalid-feedback d-block"
+        pwdCheck.textContent = "Passwords must match."
+        return Promise.resolve(false)
+    }
+    return signUp(email, pass)
 };
 
 function signUp(email, password) {
-    firebase.auth().createUserWithEmailAndPassword(email, password).then(e => {
+    return firebase.auth().createUserWithEmailAndPassword(email, password).then(e => {
         console.log("then fired")
         accountLogic.innerHTML = "Account successfully created"
-        window.setInterval(() => window.location.href = "index.html", 2000)
+        window.setTimeout(() => window.location.href = "index.html", 2000)
     }).catch(function (error) {
         var errorMessage = error.message;
         if ((/(email)+/g).test(errorMessage)) {
@@ -44,15 +51,12 @@ function signUp(email, password) {
             console.log(errorMessage)
             txtEmail.className += " is-invalid"
             emailCheck.className = "invalid-feedback"
-            emailCheck.innerHTML = error.message
+            emailCheck.textContent = error.message
         } else {
             console.log(error.code + error.message)
             txtPassword.className += " is-invalid"
-            pwdCheck.className = "invalid-feedback"
-            pwdCheck.innerHTML = error.message
-            if (pass != rptPass) {
-                console.log("invalid fired")
-            }
+            pwdCheck.className = "invalid-feedback d-block"
+            pwdCheck.textContent = error.message
         }
     })
 }
