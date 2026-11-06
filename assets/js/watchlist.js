@@ -6,43 +6,58 @@ const mainStocks = document.getElementById("stocksMain")
 const infoType = document.getElementById("info-type")
 const cardGroup = document.getElementById("card-group")
 
-let userWatchlist = rootRef.child("users")
+let userWatchlist = null
+let watchlistCallback = null
+let watchlistGeneration = 0
 
-userWatchlist.on("value", function (snapshot) {
-    stockArray = Object.values(snapshot.val())
-    console.log('watchlist fired')
-    console.log(stockArray)
-    loadWatchlistedStocks(stockArray)
+firebase.auth().onAuthStateChanged(function (user) {
+    if (userWatchlist && watchlistCallback) userWatchlist.off("value", watchlistCallback)
+    userWatchlist = null
+    ++watchlistGeneration
+    if (cardGroup) cardGroup.innerHTML = ""
+    if (!user) {
+        if (cardGroup) cardGroup.textContent = "Sign in to view your watchlist."
+        return
+    }
+    userWatchlist = rootRef.child("users").child(user.uid)
+    // Each account owns a separate subscription; never read the shared /users node.
+    watchlistCallback = function (snapshot) {
+        if (!firebase.auth().currentUser || firebase.auth().currentUser.uid !== user.uid) return
+        const value = snapshot.val() || {}
+        const stocks = Object.values(value.watchlist || {}).filter(item => item && typeof item.stock === "string")
+        if (value.stock && !stocks.some(item => item.stock === value.stock)) stocks.push({ stock: value.stock })
+        if (cardGroup) cardGroup.innerHTML = ""
+        loadWatchlistedStocks(stocks, ++watchlistGeneration)
+    }
+    userWatchlist.on("value", watchlistCallback, function () {
+        if (cardGroup) cardGroup.textContent = "Unable to load your watchlist."
+    })
 })
 
-function loadWatchlistedStocks(array) {
-    if (array === []) {
-        // pass - call default function
-    } else if (Array.isArray || typeOf(array) == (string)) {
-        console.log(array)
-        for (let i = 0; i < array.length; i++) {
-            fetch(
-                `https://sandbox.iexapis.com/stable/stock/${array[i].stock}/chart/dynamic?token=Tsk_f505cc8d1a8e429e9f06fc365bb67dbb`
-            ).then(response => response.json()).then((allInfo) => {
-                console.log(allInfo.range)
-                let symbol = array[i].stock
-                if (allInfo.range === '1m' || 'm1') {
-                    console.log("After trading hours")
-                    let allData = Object.values(allInfo)
-                    cardPopulatorAfterHours(allData, symbol)
-                } else if (allInfo.range === "dotya") {
-                    console.log("During Trading hours")
-                } else {
-                    console.log("unknown range" + allInfo.range)
-                }
-            })
-        }
+function loadWatchlistedStocks(array, generation = watchlistGeneration) {
+    if (!Array.isArray(array) || array.length === 0) {
+        if (cardGroup) cardGroup.textContent = "Your watchlist is empty."
+        return
+    }
+    for (const item of array) {
+        const symbol = item && item.stock
+        if (typeof symbol !== 'string' || !/^[A-Z0-9][A-Z0-9.-]{0,14}$/.test(symbol)) continue
+        fetch(
+            `https://sandbox.iexapis.com/stable/stock/${encodeURIComponent(symbol)}/chart/dynamic?token=Tsk_f505cc8d1a8e429e9f06fc365bb67dbb`
+        ).then(response => response.json()).then(allInfo => {
+            if (generation !== watchlistGeneration) return
+            return cardPopulatorAfterHours(Object.values(allInfo), symbol, generation)
+        }).catch(() => {
+            if (generation === watchlistGeneration && cardGroup) cardGroup.textContent = "Unable to load stock data."
+        })
     }
 }
 
-function cardPopulatorAfterHours(allData, symbol) {
-    let mostRecent = allData[1].slice(-1).pop()
-    fetch(
+function cardPopulatorAfterHours(allData, symbol, generation = watchlistGeneration) {
+    const rows = allData.find(Array.isArray) || []
+    const mostRecent = rows[rows.length - 1]
+    if (!mostRecent) return
+    return fetch(
         `https://sandbox.iexapis.com/stable/stock/${symbol}/company?token=Tsk_f505cc8d1a8e429e9f06fc365bb67dbb`
     ).then(response => response.json()).then((companyInfo) => {
         let text =
@@ -92,25 +107,28 @@ function cardPopulatorAfterHours(allData, symbol) {
                 </div>
             </div>
                         `
-        if (cardGroup != null) {
+        if (cardGroup != null && generation === watchlistGeneration) {
             cardGroup.innerHTML += text
         }
     })
 }
 
 function addToWatchlist(symbol) {
-    let currentUser = firebase.auth().currentUser;
-    console.log(currentUser.uid)
-    console.log()
-    firebase.database().ref('users/' + currentUser.uid).set({
-        stock: symbol
-    })
-    firebase.database().ref("users/" + currentUser.uid).on("value", function (snapshot) {
-        array = Object.values(snapshot.val())
-    })
-    if (location.href != "/watchlist.html") {
-        location.href = "/watchlist.html"
+    const currentUser = firebase.auth().currentUser
+    if (!currentUser) {
+        location.href = "/login.html"
+        return Promise.resolve(false)
     }
+    symbol = String(symbol).trim().toUpperCase()
+    if (!/^[A-Z0-9][A-Z0-9.-]{0,14}$/.test(symbol)) return Promise.resolve(false)
+    const key = encodeURIComponent(symbol).replace(/\./g, "%2E")
+    return firebase.database().ref('users/' + currentUser.uid + '/watchlist/' + key).set({stock:symbol}).then(() => {
+        if (location.pathname !== "/watchlist.html") location.href = "/watchlist.html"
+        return true
+    }).catch(() => {
+        if (cardGroup) cardGroup.textContent = "Unable to save this stock. Please try again."
+        return false
+    })
 }
 
 function seeMoreInfo(symbol) {

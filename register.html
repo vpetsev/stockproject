@@ -58,6 +58,7 @@
                         <span class="input-group-text"> <i class="fa fa-envelope"></i> </span>
                     </div>
                     <input id="txtEmail" name="" class="form-control" placeholder="Email address" type="email">
+                    <div id="email-check" class="invalid-feedback" role="alert"></div>
                 </div>
                 <div class="form-group input-group">
                     <div class="input-group-prepend">
@@ -79,13 +80,15 @@
                     <div class="input-group-prepend">
                         <span class="input-group-text"> <i class="fa fa-lock"></i> </span>
                     </div>
-                    <input class="form-control" placeholder="Repeat password" type="password">
+                    <input id="txtPassword2" class="form-control" placeholder="Repeat password" type="password">
+                    <div id="pwd-check" class="invalid-feedback d-block" role="alert"></div>
                 </div>
 
                 <!-- form-group //END -->
 
                 <div class="form-group">
                     <button id="btnSignUp" type="submit" class="btn btn-primary btn-block"> Create account </button>
+                    <p id="accountLogic" role="status" aria-live="polite"></p>
                 </div>
 
                 <!-- REDIRECT TO SIGN IN -->
